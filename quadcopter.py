@@ -1,15 +1,13 @@
 """
 Course code: CS 489
-Course title: Introduction to nmanned Aerial Systems
+Course title: Introduction to Unmanned Aerial Systems
 Author: Mohamed Abdelkader
 Email: mohamedashraf123@gmail.com
 Date: Sept, 2022
 
 Description:
-Visualize 2D and 3D coordinate frames
+Implementation of quadrotor dynamics
 
-Reference videos
-- https://youtu.be/c8Xb7krH2_w 
 """
 
 import numpy as np
@@ -99,7 +97,7 @@ class Quadcopter:
 
     def clacR(self, rpy):
         """
-        Calculate roation marix self._R from Euler angles
+        Calculates roation marix self._R from Euler angles
         Uses ZYX order
         
         Params:
@@ -108,8 +106,27 @@ class Quadcopter:
         R = SO3.Rz(rpy[2])*SO3.Ry(rpy[1])*SO3.Rx(rpy[0])
         self._R = R.R
 
+    def calcRPYdot(self, rpy, pqr):
+        """
+        Transforms body angular speed (p,q,r) to Euler angles rates (roll_rate, pitch_rate, yaw_rate)
+
+        Params:
+            rpy: 3x1 roll, pitch, yaw
+            pqr: 3x1 body angular rates
+        Returns:
+            rpy_dot: 3x1 Euler angles rates
+        """
+        r = rpy[0]
+        p = rpy[1]
+        R = np.array([ [np.cos(p), 0, np.sin(p)],
+                        [np.sin(p)*np.tan(r), 1, -np.cos(p)*np.tan(r)],
+                        [-np.sin(p)/np.cos(r), 0, np.cos(p)/np.cos(r)] ])
+        rpy_dot = np.dot(R,pqr)
+        return rpy_dot
+
     def stateDot(self, time, state):
-        # States, x= [x y z x_dot y_dot z_dot phi theta psi phi_dot theta_dot psi_dot]
+        #            [0 1 2  3     4      5    6    7    8  9 10 11]
+        # States, x= [x y z x_dot y_dot z_dot phi theta psi p q r]
         x_dot = np.zeros(12)
 
         # Linear velocities
@@ -124,15 +141,16 @@ class Quadcopter:
         x_dot[4] = acc[1]
         x_dot[5] = acc[2]
         # angular rates
-        x_dot[6] = state[9]
-        x_dot[7] = state[10]
-        x_dot[8] = state[11]
+        rpy_dot = self.calcRPYdot(self._state[6:9], self._state[9:12])
+        x_dot[6] = rpy_dot[0]
+        x_dot[7] = rpy_dot[1]
+        x_dot[8] = rpy_dot[2]
         # Angular acceleration
         omega = state[9:12]
-        ommega_dot = np.dot(self._Iinv, ( self._u2- np.cross(omega, np.dot(self._I, omega)) ) )
-        x_dot[9] = ommega_dot[0]
-        x_dot[10] = ommega_dot[1]
-        x_dot[11] = ommega_dot[2]
+        omega_dot = np.dot(self._Iinv, ( self._u2- np.cross(omega, np.dot(self._I, omega)) ) )
+        x_dot[9] = omega_dot[0]
+        x_dot[10] = omega_dot[1]
+        x_dot[11] = omega_dot[2]
 
         return x_dot
 

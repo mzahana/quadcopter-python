@@ -1,6 +1,4 @@
 """
-Course code: CS 489
-Course title: Introduction to Unmanned Aerial Systems
 Author: Mohamed Abdelkader
 Email: mohamedashraf123@gmail.com
 Date: Sept, 2022
@@ -19,16 +17,18 @@ import datetime
 import threading
 
 class Quadcopter:
-    def __init__(self, weight=1.0, L=.3, r=0.1, max_m_rpm=13860) :
+    def __init__(self, weight=2.0, L=.22, r=0.1, max_m_rpm=13000, kf=1.4e-5, km=2.0e-6) :
         """
         Params:
             weight: (float) wuadcopter weight in Kg
             L: (float) Arm length - half body length, in meters
             r: (float) adius of sphere that is used to estimate inertia
+            kf: (float) Motor's force constant
+            km: (float) Motor's torque constant
             max_m_rpm:R (int) Maximum motor RPM
         """
-        self._kf = 0.228 # motor force constant
-        self._km = 0.12 # motor torque constant
+        self._kf = kf
+        self._km = km
         self._gamma = self._km/self._kf
         self._m = weight
         self._L = L # arm length, half of total body length
@@ -41,10 +41,10 @@ class Quadcopter:
         # Quadrotor Dynamics and Control Rev , Randal Beard
         # https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=2324&context=facpub
         ixx = (2*self._m*self._r**2/5) + (2*self._L**2/self._m)
-        iyy = self._ixx
+        iyy = ixx
         izz = (2*self._m*self._r**2/5) + (4*self._L**2/self._m)
         self._I = np.array([[ixx,0,0],[0,iyy,0],[0,0,izz]])
-        self._Iinv = np.linalg.inv(I)
+        self._Iinv = np.linalg.inv(self._I)
 
         self._g = 9.18 # gravity m/s/s
 
@@ -97,10 +97,10 @@ class Quadcopter:
 
     def motorSpeedsFromInputs(self,u):
         """
-        Calculate motor speeds from inputs self._u1, self._u2
+        Calculate motor speeds from inputs u=[self._u1, self._u2]
 
         Params:
-            u: (4x1 np.ndarray) u1(1x1)=thrust, u2(3x1)=moments
+            u: (4x1 np.ndarray) u=[u1(1x1)=thrust, u2(3x1)=moments]
         """
         F=self._Cinv.dot(u)
         self._motor_speeds = np.sqrt(F/self._kf)
@@ -116,6 +116,18 @@ class Quadcopter:
         """
         R = SO3.Rz(rpy[2])*SO3.Ry(rpy[1])*SO3.Rx(rpy[0])
         self._R = R.R
+
+    def getR(self):
+        """
+        Returns rotation matrix of current attitude
+        """
+        # x= [x y z x_dot y_dot z_dot phi theta psi phi_dot theta_dot psi_dot]
+        rpy=np.zeros(3)
+        rpy[0]=self._state[6]
+        rpy[1]=self._state[7]
+        rpy[2]=self._state[8]
+        R = SO3.Rz(rpy[2])*SO3.Ry(rpy[1])*SO3.Rx(rpy[0])
+        return R.R
 
     def calcRPYdot(self, rpy, pqr):
         """
@@ -134,6 +146,9 @@ class Quadcopter:
                         [-np.sin(p)/np.cos(r), 0, np.cos(p)/np.cos(r)] ])
         rpy_dot = np.dot(R,pqr)
         return rpy_dot
+
+    def setState(self, state):
+        self._state = state
 
     def stateDot(self, time, state):
         #            [0 1 2  3     4      5    6    7    8  9 10 11]
@@ -215,8 +230,25 @@ class Quadcopter:
                 last_update = self._time
 
     def startThread(self,dt=0.002):
-        self._thread_object = threading.Thread(target=self.threadRun,args=(dt))
+        self._thread_object = threading.Thread(target=self.threadRun,args=(dt,))
         self._thread_object.start()
 
     def stopThread(self):
         self._run = False
+
+if __name__=="__main__":
+    quad = Quadcopter()
+    init_state = np.zeros(12)
+    quad.setState(init_state)
+    u = np.array([1.87*9.8, 0,0,0])
+    quad.motorSpeedsFromInputs(u)
+    quad.startThread()
+
+    for i in range(10):
+        time.sleep(1)
+        print(quad._state[2]) # altitude
+        
+    quad.stopThread()
+        
+
+    

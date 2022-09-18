@@ -19,13 +19,23 @@ import datetime
 import threading
 
 class Quadcopter:
-    def __init__(self, weight=1.0, L=.3, r=0.1) :
+    def __init__(self, weight=1.0, L=.3, r=0.1, max_m_rpm=13860) :
+        """
+        Params:
+            weight: (float) wuadcopter weight in Kg
+            L: (float) Arm length - half body length, in meters
+            r: (float) adius of sphere that is used to estimate inertia
+            max_m_rpm:R (int) Maximum motor RPM
+        """
         self._kf = 0.228 # motor force constant
         self._km = 0.12 # motor torque constant
         self._gamma = self._km/self._kf
         self._m = weight
         self._L = L # arm length, half of total body length
         self._r = r # radius of sphere that is used to estimate inertia
+
+        self._max_motor_rpm = max_m_rpm
+        self._max_motor_rps = self._max_motor_rpm * 0.10472 # in rad/sec
         
         # Inertia is estimated according to the following reference
         # Quadrotor Dynamics and Control Rev , Randal Beard
@@ -90,10 +100,11 @@ class Quadcopter:
         Calculate motor speeds from inputs self._u1, self._u2
 
         Params:
-        u: (4x1 np.ndarray) u1(1x1)=thrust, u2(3x1)=moments
+            u: (4x1 np.ndarray) u1(1x1)=thrust, u2(3x1)=moments
         """
         F=self._Cinv.dot(u)
         self._motor_speeds = np.sqrt(F/self._kf)
+        np.clip(self._motor_speeds, 0, self._max_motor_rps)
 
     def clacR(self, rpy):
         """
@@ -101,7 +112,7 @@ class Quadcopter:
         Uses ZYX order
         
         Params:
-        rpy: 3x1 np.ndarray roll, pitch, yaw in radians
+            rpy: 3x1 np.ndarray roll, pitch, yaw in radians
         """
         R = SO3.Rz(rpy[2])*SO3.Ry(rpy[1])*SO3.Rx(rpy[0])
         self._R = R.R

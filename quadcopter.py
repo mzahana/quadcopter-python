@@ -86,6 +86,8 @@ class Quadcopter:
             u: (4x1 np.ndarray) u=[u1(1x1)=thrust, u2(3x1)=moments]
         """
         F=self._Cinv.dot(u)
+        F = np.clip(F,0,np.inf)
+        # print("F: ", F)
         self._motor_speeds = np.sqrt(F/self._kf)
         self._motor_speeds=np.clip(self._motor_speeds, 0, self._max_rps)
 

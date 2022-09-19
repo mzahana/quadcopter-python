@@ -100,7 +100,7 @@ class Controller:
         self._state = np.zeros(12)
 
         # Moments scaler
-        self._M_scaler = 1.0
+        self._M_scaler = 10.0
 
         # Desired position
         self._des_pos = np.zeros(3)
@@ -157,8 +157,8 @@ class Controller:
         rpy = R.rpy(order='zyx')
         thrust = np.dot(acc, zb_des)
 
-        print("rpy: ", rpy*180/np.pi)
-        print("thrust: ", thrust)
+        # print("rpy: ", rpy*180/np.pi)
+        # print("thrust: ", thrust)
 
         return (rotMat, rpy, thrust)
 
@@ -197,6 +197,7 @@ class Controller:
         az_sp = self._vz_pid.update(e_vz,dt)
 
         des_acc = np.array([ax_sp, ay_sp, az_sp])
+        # print("des_acc: ", des_acc)
         _, rpy, thrust = self.acc2RotAndThrust(des_acc, self._des_yaw)
 
         roll_des = self.wrapAngle(rpy[0])
@@ -224,6 +225,8 @@ class Controller:
         mz = self._M_scaler*self._yaw_rate_pid.update(yaw_rate_sp - wz, dt)
 
         u = np.array([thrust, mx, my, mz])
+        # print("u: ", u)
+        self._quad.setMotorSpeedsFromInputs(u)
         # print("u:", u)
 
         return u
@@ -263,7 +266,7 @@ if __name__ == "__main__":
 
     for i in range(10):
         time.sleep(1)
-        cont.setDesiredPos(np.array([0,-1,0+i+1]))
+        cont.setDesiredPos(np.array([1,0,0+i+1]))
 
     cont.stopThread()
         

@@ -8,6 +8,7 @@ Implementation of quadrotor dynamics
 
 """
 
+from cmath import isnan
 import numpy as np
 from spatialmath import SE3, SO3
 import matplotlib.pyplot as plt
@@ -37,7 +38,12 @@ class Dynamics:
 
 
     def wrapAngle(self,val):
-        return( ( val + np.pi) % (2 * np.pi ) - np.pi )
+        if isnan(val):
+            return 0
+        # print("ang: ", val)
+        if val < -np.pi or val > np.pi:
+            return( ( val + np.pi) % (2 * np.pi ) - np.pi )
+        return val
 
     
     def calcRPYdot(self, rpy, pqr):
@@ -70,7 +76,9 @@ class Dynamics:
         x_dot[1] = v[1]
         x_dot[2] = v[2]
         # Linear accelerations
+        self._quad.inputsFromMotorSpeeds()
         u1=self._quad.getTotalThrust()
+        # print("u1: ", u1)
         R = self._quad.getR()
         m = self._quad.mass()
         acc = np.array([0,0, -self._g]) + (1/m) * R.dot(np.array([0,0,u1]))
@@ -98,7 +106,9 @@ class Dynamics:
     def update(self, dt):
         self._ode.set_initial_value(self._quad.getState(),0)
         state = self._ode.integrate(self._ode.t + dt)
-        state[6:9] = self.wrapAngle(state[6:9])
+        state[6] = self.wrapAngle(state[6])
+        state[7] = self.wrapAngle(state[7])
+        state[8] = self.wrapAngle(state[8])
         state[2] = max(0,state[2]) # to avoid going below ground level (z=0)
         self._quad.setState(state)
 

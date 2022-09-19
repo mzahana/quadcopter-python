@@ -15,23 +15,22 @@ class QuadPlot:
     """
     Draws a quadcopter, given a position and orientation matrix R
     """
-    def __init__(self, ax, arm_l=0.45, prop_l=0.2286, x=np.array([0,0,0]), R=np.eye(3,3), color='r'):
+    def __init__(self, ax, quad, color='r'):
         """
         Initialize quadcopter plot
 
         Params:
             ax: plotting axis
-            arms_l: (float) arm/frame length in meter
-            prop_l: (float) Propeller length/diameter in meter
-            x: (3x1 numpy.ndarray) current quadcopter position
-            R:  (3x3 numpy.ndarray) Rotation matrix
+            color: [str] quadcopter color
         """
-        self._prop_l = prop_l # Propeller diameter
-        self._arm_l = arm_l # Arm length in meter (from motor to motor)
         self._ax = ax # plotting axis
-        self._x = x
-        self._R = SO3(R)
-        self._T = SE3.Rt(self._R,x) # Homogenous transformation matrix of the quadrotor
+        self._quad = quad # Quadcopter object
+        self._prop_l = quad._prop_l # Propeller diameter
+        self._arm_l = quad._L*2 # Arm length in meter (from motor to motor)  
+        t = quad.getPosition()
+        rot = quad.getR()
+        R = SO3(rot)
+        self._T = SE3.Rt(R,t) # Homogenous transformation matrix of the quadrotor
 
         # Drone body axes
         self._xb = np.array([1.0, 0.0, 0.0])
@@ -127,27 +126,27 @@ class QuadPlot:
                         self._m4_w[1,:],
                         self._m4_w[2,:], color='k')
 
-    def update(self, R,t):
-        self._R = SO3(R)
-        self._x = t
-        self._T = SE3.Rt(self._R,t)
+    def update(self):
+        R = SO3(self._quad.getR())
+        t = self._quad.getPosition()
+        self._T = SE3.Rt(R,t)
 
         self.drawArms()
         self.drawPropellers()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from quadcopter import Quadcopter
+    q = Quadcopter()
+    q.setPosition(np.array([1,2,3]))
+    q.setRPY(np.array([45.*np.pi/180,0,0]))
 
     # plt.style.use('seaborn')
     fig = plt.figure('Quad')
     ax = fig.add_subplot(111, projection='3d')
 
-    quad = QuadPlot(ax=ax, arm_l=0.8)
-    # R = np.eye(3,3)
-    r = SO3.Rx(45, unit='deg')
-    R = r.R
-    t = [1,2,3]
-    quad.update(R=R,t=t)
+    quad = QuadPlot(ax,q)
+    quad.update()
     ax.set_xlim(-5,5)
     ax.set_ylim(-5,5)
     ax.set_zlim(-5,5)

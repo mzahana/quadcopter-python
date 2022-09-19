@@ -8,7 +8,7 @@ Description:
 
 """
 from controller import Controller
-from quadcopter import Quadcopter
+from quad_dynamics import Dynamics
 from draw_quad import  QuadPlot
 import signal
 import sys
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 run=True
 
 # Dynamics object
-quad_dyn = Quadcopter()
+quad_dyn = Dynamics()
 # Controller
 params={'xy_kp': 1.0, 'z_kp': 1.0,
     'vxy_pid':[1.0,0.2, 0.004], 'vz_pid': [1.0, .02, 0.003],

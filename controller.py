@@ -55,8 +55,16 @@ class PID:
         self._kd = d
 
 class Controller:
-    def __init__(self, params):
+    def __init__(self, quad, params):
+        """
+        Params:
+            quad: Quadcopter object
+            params: Controller parameters e.g. PID gains ang limits
+                params={'xy_kp', 'z_kp', 'vxy_pid', 'vz_pid', 'roll_kp', 'pitch_kp' 'yaw_kp', 'roll_speed_pid', 'pitch_speed_pid' 'yaw_speed_pid'}
+        """
         # params={'xy_kp', 'z_kp', 'vxy_pid', 'vz_pid', 'roll_kp', 'pitch_kp' 'yaw_kp', 'roll_speed_pid', 'pitch_speed_pid' 'yaw_speed_pid'}
+        self._quad = quad
+
         # XY PIDs
         self._x_pid = PID(params['xy_kp'], 0,0, maxInt=50)
         self._y_pid = PID(params['xy_kp'], 0,0, maxInt=50)
@@ -133,7 +141,7 @@ class Controller:
             thrust: (float) Total desired thrust in body frame, Newton
 
         """
-        print("acc: ", acc)
+        # print("acc: ", acc)
         proj_xb_des = np.array([np.cos(yaw), np.sin(yaw), 0])
         zb_des = acc / np.linalg.norm(acc)
         v = np.cross(zb_des, proj_xb_des)
@@ -148,6 +156,9 @@ class Controller:
         R = SO3(rotMat)
         rpy = R.rpy(order='zyx')
         thrust = np.dot(acc, zb_des)
+
+        print("rpy: ", rpy*180/np.pi)
+        print("thrust: ", thrust)
 
         return (rotMat, rpy, thrust)
 
@@ -165,9 +176,10 @@ class Controller:
             dt: time step, seconds
         """
         # print("des_pos: ", self._des_pos)
-        e_px = self._des_pos[0] - self._state[0]
-        e_py = self._des_pos[1] - self._state[1]
-        e_pz = self._des_pos[2] - self._state[2]
+        p = self._quad.getPosition()
+        e_px = self._des_pos[0] - p[0]
+        e_py = self._des_pos[1] - p[1]
+        e_pz = self._des_pos[2] - p[2]
         # print("position errors: ", e_px, e_py, e_pz)
 
         vx_sp = np.clip(self._x_pid.update(e_px,dt), -self._maxXYVel, self._maxXYVel)
@@ -175,9 +187,10 @@ class Controller:
         vz_sp = np.clip(self._z_pid.update(e_pz,dt), -self._maxZVel,self._maxZVel)
         # print("vel sp: ", vx_sp, vy_sp, vz_sp)
 
-        e_vx = vx_sp - self._state[3]
-        e_vy = vy_sp - self._state[4]
-        e_vz = vz_sp - self._state[5]
+        v = self._quad.getLinearVel()
+        e_vx = vx_sp - v[0]
+        e_vy = vy_sp - v[1]
+        e_vz = vz_sp - v[2]
 
         ax_sp = self._vx_pid.update(e_vx,dt)
         ay_sp = self._vy_pid.update(e_vy,dt)
@@ -193,14 +206,22 @@ class Controller:
         yaw_des = rpy[2]
         yaw_des = self.wrapAngle(yaw_des)
 
-        roll_rate_sp = np.clip(self._roll_pid.update(roll_des-self._state[6], dt), - self._maxTiltRate, self._maxTiltRate)
-        pitch_rate_sp = np.clip(self._pitch_pid.update(pitch_des-self._state[7], dt), -self._maxTiltRate, self._maxTiltRate)
-        yaw_rate_sp = np.clip(self._yaw_pid.update(yaw_des-self._state[8], dt), -self._maxYawRate, self._maxYawRate)
+        rpy = self._quad.getRPY()
+        roll=rpy[0]
+        pitch=rpy[1]
+        yaw=rpy[2]
+        roll_rate_sp = np.clip(self._roll_pid.update(roll_des-roll, dt), - self._maxTiltRate, self._maxTiltRate)
+        pitch_rate_sp = np.clip(self._pitch_pid.update(pitch_des-pitch, dt), -self._maxTiltRate, self._maxTiltRate)
+        yaw_rate_sp = np.clip(self._yaw_pid.update(yaw_des-yaw, dt), -self._maxYawRate, self._maxYawRate)
 
         # Body moments
-        mx = self._M_scaler*self._roll_rate_pid.update(roll_rate_sp - self._state[9], dt)
-        my = self._M_scaler*self._pitch_rate_pid.update(pitch_rate_sp - self._state[10], dt)
-        mz = self._M_scaler*self._yaw_rate_pid.update(yaw_rate_sp - self._state[11], dt)
+        w = self._quad.getAngularVel()
+        wx = w[0]
+        wy = w[1]
+        wz = w[2]
+        mx = self._M_scaler*self._roll_rate_pid.update(roll_rate_sp - wx, dt)
+        my = self._M_scaler*self._pitch_rate_pid.update(pitch_rate_sp - wy, dt)
+        mz = self._M_scaler*self._yaw_rate_pid.update(yaw_rate_sp - wz, dt)
 
         u = np.array([thrust, mx, my, mz])
         # print("u:", u)
@@ -225,21 +246,24 @@ class Controller:
         self._run = False
 
 if __name__ == "__main__":
+    from quadcopter import Quadcopter
+    q = Quadcopter()
+    # q.setPosition(np.array([0,0,1]))
+
     params={'xy_kp': 1.0, 'z_kp': 1.0,
     'vxy_pid':[1.0,0.2, 0.004], 'vz_pid': [1.0, .02, 0.003],
     'roll_kp': 6.0, 'pitch_kp': 6.0, 'yaw_kp': 2.0,
     'roll_speed_pid': [0.15, 0.2, 0.003],
     'pitch_speed_pid': [0.15, 0.2, 0.003], 
     'yaw_speed_pid': [0.15, 0.2, 0.0]}
-    cont = Controller(params)
-    cont.updateState(np.zeros(12))
+    cont = Controller(q,params)
     cont.setDesiredPos(np.array([0,0,1]))
-    cont.setDesiredYaw(45*np.pi/180)
+    cont.setDesiredYaw(0*np.pi/180)
     cont.startThread()
 
     for i in range(10):
         time.sleep(1)
-        cont.setDesiredPos(np.array([0,1,0+i+1]))
+        cont.setDesiredPos(np.array([0,-1,0+i+1]))
 
     cont.stopThread()
         
